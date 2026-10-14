@@ -7,7 +7,7 @@ from arq import create_pool
 from arq.connections import ArqRedis, RedisSettings
 from fastapi import FastAPI, Header, HTTPException, Request
 
-from backend.config import settings
+from backend.core.config import settings
 
 GITHUB_WEBHOOK_SECRET = settings.GITHUB_WEBHOOK_SECRET
 REDIS_SETTINGS = RedisSettings(host="localhost", port=6379)
