@@ -5,7 +5,16 @@ from decimal import Decimal
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Computed, DateTime, ForeignKey, Index, Integer, Numeric, Text
+from sqlalchemy import (
+    CheckConstraint,
+    Computed,
+    DateTime,
+    ForeignKey,
+    Index,
+    Numeric,
+    Text,
+    column,
+)
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -32,29 +41,35 @@ class SeverityLevel(str, enum.Enum):
 class PRReviewRecord(Base):
     __tablename__ = "pr_review_records"
 
+    __table_args__ = (
+        CheckConstraint(
+            column("status").in_([e.value for e in ReviewStatus]),
+            name="check_pr_review_status",
+        ),
+    )
+
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     repo_full_name: Mapped[str] = mapped_column(Text)
     pr_number: Mapped[int] = mapped_column()
-    commit_sh: Mapped[str] = mapped_column(Text)
+    commit_sha: Mapped[str] = mapped_column(Text)
 
-    overall_confidance: Mapped[Decimal | None] = mapped_column(Numeric(4, 3))
+    overall_confidence: Mapped[Decimal | None] = mapped_column(Numeric(4, 3))
 
     status: Mapped[ReviewStatus] = mapped_column(
         SQLEnum(
             ReviewStatus,
             native_enum=False,
-            create_constraint=True,
+            create_constraint=False,
             validate_strings=True,
             values_callable=lambda obj: [e.value for e in obj],
-            name="check_pr_review_status",
         ),
         default=ReviewStatus.PENDING,
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     findings: Mapped[list["FindingRecord"]] = relationship(
@@ -65,11 +80,18 @@ class PRReviewRecord(Base):
 class FindingRecord(Base):
     __tablename__ = "finding_records"
 
+    __table_args__ = (
+        CheckConstraint(
+            column("severity").in_([e.value for e in SeverityLevel]),
+            name="check_finding_severity",
+        ),
+    )
+
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     review_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("pr_review_records.id"), ondelete="CASCADE"
+        ForeignKey("pr_review_records.id", ondelete="CASCADE")
     )
     agent_type: Mapped[str] = mapped_column(Text)
 
@@ -77,10 +99,9 @@ class FindingRecord(Base):
         SQLEnum(
             SeverityLevel,
             native_enum=False,
-            create_constraint=True,
+            create_constraint=False,
             validate_strings=True,
             values_callable=lambda obj: [e.value for e in obj],
-            name="check_finding_severity",
         )
     )
     file_path: Mapped[str] = mapped_column(Text)
@@ -117,7 +138,7 @@ Index(
     CodeChunk.embedding,
     postgresql_using="hnsw",
     postgresql_with={"m": 16, "ef_construction": 64},
-    postgressql_ops={"embedding": "vector_ip_ops"},
+    postgresql_ops={"embedding": "vector_ip_ops"},
 )
 Index("code_chunks_fts_idx", CodeChunk.content_tsv, postgresql_using="gin")
 
